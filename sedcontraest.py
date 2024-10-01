@@ -53,6 +53,17 @@ def list_processed_tweets():
     logger.info(f"Number of tweets ever processed: {str(len(lines))}")
     return lines
 
+def answer(statement):
+    messages = [
+        {"role": "system", "content": "I want you to act as a catholic theology scholar. I will provide you with a statement and you will answer with a quote from a work of any preconciliar catholic theologian, pope or church father. Your quote offers a theological truth that is closely related to the statement. Your quote can be opposing it if it is not aligning with the truth of the deposit of faith. You prefer to quote from sources that are not very popular. You just return the quote and its author. Use the same language as the statement."}
+    ] 
+    messages.append({"role": "user", "content": statement})
+    completion = AI.chat.completions.create(
+      model="gpt-3.5-turbo",
+      messages=messages
+    )
+    return completion.choices[0].message.content
+
 def clean_tweet(tweet):
     # Remove Twitter handles (@user)
     tweet = re.sub(r'@[A-Za-z0-9_]+', '', tweet)
@@ -108,17 +119,6 @@ async def main():
         response = await sedcontraest_twikit_client.create_tweet(text=reply, reply_to=tweet.id)
         logger.info(f"Twikit response '{response}'")
         add_to_list_of_processed_tweets(tweet.id)
-
-def answer(statement):
-    messages = [
-        {"role": "system", "content": "I want you to act as a catholic theology scholar. I will provide you with a statement and you will answer in the same language with a quote from a work of any preconciliar catholic theologian, pope or church father. Your quote offers a theological truth that is closely related to the statement. Your quote can be opposing it if it is not aligning with the truth of the deposit of faith. You prefer to quote from sources that are not very popular. You just return the quote and its author."}
-    ] 
-    messages.append({"role": "user", "content": statement})
-    completion = AI.chat.completions.create(
-      model="gpt-3.5-turbo",
-      messages=messages
-    )
-    return completion.choices[0].message.content
 
 
 asyncio.run(main())
