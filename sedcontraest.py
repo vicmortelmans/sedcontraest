@@ -6,7 +6,6 @@ from openai import OpenAI
 import os
 import re
 from sys import stdout
-import tweepy
 from twikit import Client
 
 logger = logging.getLogger("sedcontraest")
@@ -19,15 +18,6 @@ load_dotenv(os.getenv('HOME') + "/.env")  # contains OPENAI_API_KEY
 AI = OpenAI()
 
 _HISTORY = os.path.expanduser("~/.sedcontraest_history")
-
-# Authenticate to Twitter API for user 'sedcontraest'
-#key = ""
-#keySecret = " "
-#accessToken = " "
-#accessTokenSecret = " "
-#bearer_token=None
-#sedcontraest_tweepy_client = tweepy.Client(None,os.environ["X_API_KEY"],os.environ["X_API_KEY_SECRET"],os.environ["X_ACCESS_TOKEN"],os.environ["X_ACCESS_TOKEN_SECRET"])
-#sedcontraest_tweepy_client.get_me() 
 
 def add_to_list_of_processed_tweets(tweet_id):
     history_filename = f"{_HISTORY}"
@@ -55,14 +45,22 @@ def list_processed_tweets():
 
 def answer(statement):
     messages = [
-        {"role": "system", "content": "I want you to act as a catholic theology scholar. I will provide you with a statement and you will answer with a quote from a work of any preconciliar catholic theologian, pope or church father. Your quote offers a theological truth that is closely related to the statement. Your quote can be opposing it if it is not aligning with the truth of the deposit of faith. You prefer to quote from sources that are not very popular. You just return the quote and its author. Use the same language as the statement."}
+        {"role": "system", "content": "I want you to act as a catholic theology scholar. I will provide you with a statement and you will answer with a quote from a work of any preconciliar catholic theologian, pope or church father. Your quote contains a theological truth that is closely related to the statement. Your quote can be contradicting the statement if it is not aligning with the truth of the deposit of faith. You prefer to quote from sources that are not very popular. You just return the quote and its author. Your answer is in the same language as the statement."}
     ] 
     messages.append({"role": "user", "content": statement})
-    completion = AI.chat.completions.create(
-      model="gpt-3.5-turbo",
-      messages=messages
-    )
-    return completion.choices[0].message.content
+    while True:
+        completion = AI.chat.completions.create(
+          model="gpt-3.5-turbo",
+          messages=messages
+        )
+        response = completion.choices[0].message.content
+        if len(response) < 240:
+            break       
+        else:
+            logger.info(f"Find shorter quote i.o. '{response}'")
+            messages.append({"role": "assistant", "content": response})
+            messages.append({"role": "user", "content": "This is too long. Please find a shorter quote."})
+    return response
 
 def clean_tweet(tweet):
     # Remove Twitter handles (@user)
@@ -73,7 +71,7 @@ def clean_tweet(tweet):
     tweet = re.sub(r'http\S+|www\S+|https\S+', '', tweet)
     # Remove excess whitespace
     tweet = tweet.strip()
-    return tweet[:280]
+    return tweet
 
 async def main():
     # Authenticate to Twitter scraper for user 'catechismus'
@@ -114,11 +112,12 @@ async def main():
             logger.warning(f"No sensible quote in tweet with text '{tweet.text}'")
             add_to_list_of_processed_tweets(tweet.id)
             continue
-        reply = "@" + tweet.user.screen_name + " " + answer(statement)
+        reply = answer(statement)
         logger.info(f"Replying to tweet '{tweet.id}' with text '{tweet.text}' containing quote '{statement}' with '{reply}'")
-        response = await sedcontraest_twikit_client.create_tweet(text=reply, reply_to=tweet.id)
-        logger.info(f"Twikit response '{response}'")
         add_to_list_of_processed_tweets(tweet.id)
+        # add to list first, because following command tends to keep causing errors 
+        response = await sedcontraest_twikit_client.create_tweet(text=reply, reply_to=str(tweet.id))
+        logger.info(f"Twikit response '{response}'")
 
 
 asyncio.run(main())
